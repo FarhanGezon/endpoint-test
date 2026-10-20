@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Proxy Gateway Dashboard</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7' } }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* Toast Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(0.5rem); } }
+        
+        .fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        .fade-out { animation: fadeOut 0.2s ease-in forwards; }
+
+        /* Screen reader utility helper */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        /* Respect system preferences for reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .fade-in, .fade-out, .transition-all, .transition-colors, .transition-transform, .transition-opacity, .animate-pulse {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-200 font-sans antialiased min-h-dvh h-dvh flex w-full overflow-hidden">
+
+    <!-- Skip to main content link for keyboard navigation -->
+    <a href="#mainContent" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-brand-600 focus:text-white focus:font-semibold focus:rounded-lg focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-white">
+        Skip to main content
+    </a>
+
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div id="sidebarBackdrop" class="fixed inset-0 bg-black/70 z-20 hidden lg:hidden backdrop-blur-sm transition-opacity duration-200 opacity-0" aria-hidden="true"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-30 w-64 bg-gray-900 border-r border-gray-800 transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out flex flex-col" aria-label="Main Navigation">
+        <div class="h-16 flex items-center justify-between px-6 border-b border-gray-800 shrink-0">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-network-wired text-brand-500 text-xl" aria-hidden="true"></i>
+                <span class="text-lg font-bold text-white tracking-wide">LLM Gateway</span>
+            </div>
+            <button id="closeSidebarBtn" type="button" class="lg:hidden text-gray-400 hover:text-white p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" aria-label="Close navigation sidebar">
+                <i class="fas fa-times text-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <!-- Navigation Tabs (WAI-ARIA Tablist) -->
+        <nav class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto" role="tablist" aria-label="Main Navigation">
+            <button type="button" id="tab-btn-overview" role="tab" aria-selected="false" aria-controls="tab-overview" tabindex="-1" data-tab="overview" class="nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/80 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-left">
+                <i class="fas fa-chart-line w-5 text-center text-gray-400" aria-hidden="true"></i>
+                <span>Overview</span>
+            </button>
+            <button type="button" id="tab-btn-endpoints" role="tab" aria-selected="true" aria-controls="tab-endpoints" tabindex="0" data-tab="endpoints" class="nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 font-medium text-left focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <i class="fas fa-server w-5 text-center text-brand-400" aria-hidden="true"></i>
+                <span>Endpoints</span>
+            </button>
+            <button type="button" id="tab-btn-logs" role="tab" aria-selected="false" aria-controls="tab-logs" tabindex="-1" data-tab="logs" class="nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/80 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-left">
+                <i class="fas fa-terminal w-5 text-center text-gray-400" aria-hidden="true"></i>
+                <span>Logs</span>
+            </button>
+            <button type="button" id="tab-btn-settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" data-tab="settings" class="nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/80 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-left">
+                <i class="fas fa-cog w-5 text-center text-gray-400" aria-hidden="true"></i>
+                <span>Settings</span>
+            </button>
+        </nav>
+
+        <!-- Footer Info -->
+        <div class="p-4 border-t border-gray-800 shrink-0 text-xs text-gray-500 flex justify-between items-center">
+            <span>Gateway v2.4.0</span>
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main id="mainContent" tabindex="-1" class="flex-1 flex flex-col h-full min-w-0 bg-gray-950 relative focus:outline-none">
+        <!-- Application Header -->
+        <header class="h-16 flex items-center justify-between px-4 lg:px-8 bg-gray-900/80 backdrop-blur-md border-b border-gray-800 shrink-0 sticky top-0 z-10">
+            <div class="flex items-center gap-3">
+                <button id="openSidebarBtn" type="button" class="lg:hidden text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-lg p-2" aria-expanded="false" aria-controls="sidebar" aria-label="Open navigation menu">
+                    <i class="fas fa-bars text-xl" aria-hidden="true"></i>
+                </button>
+                <h1 id="pageTitle" class="text-xl font-bold text-white tracking-tight">Endpoint Management</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-2 text-xs font-semibold bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full border border-emerald-500/20">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true"></span>
+                    System Operational
+                </span>
+            </div>
+        </header>
+
+        <!-- Tab Views Container -->
+        <div class="flex-1 overflow-y-auto p-4 lg:p-8">
+            
+            <!-- SECTION 1: OVERVIEW TAB -->
+            <section id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview" tabindex="0" class="tab-panel hidden space-y-6 focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-xl">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Total Requests (24h)</p>
+                        <h3 class="text-3xl font-extrabold text-white">1,284,902</h3>
+                        <p class="text-xs text-emerald-400 mt-2 flex items-center gap-1"><i class="fas fa-arrow-up" aria-hidden="true"></i> +12.4% vs yesterday</p>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Avg Latency</p>
+                        <h3 class="text-3xl font-extrabold text-brand-400">240 ms</h3>
+                        <p class="text-xs text-emerald-400 mt-2 flex items-center gap-1"><i class="fas fa-arrow-down" aria-hidden="true"></i> -18 ms faster</p>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Success Rate</p>
+                        <h3 class="text-3xl font-extrabold text-emerald-400">99.94%</h3>
+                        <p class="text-xs text-gray-400 mt-2">Target SLA: 99.90%</p>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Token Consumption</p>
+                        <h3 class="text-3xl font-extrabold text-purple-400">42.8M</h3>
+                        <p class="text-xs text-gray-400 mt-2">Est. Cost: $84.20 today</p>
+                    </div>
+                </div>
+
+                <!-- Visual Chart Container -->
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                    <h2 class="text-lg font-semibold text-white mb-4">Traffic Throughput (Requests / Minute)</h2>
+                    <div class="h-48 flex items-end justify-between gap-2 pt-8 pb-2 border-b border-gray-800" role="img" aria-label="Bar chart displaying traffic throughput over 24 hours from 12 AM to Now">
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[40%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[65%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[50%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[85%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[95%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[70%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[60%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[75%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[90%] transition-colors"></div>
+                        <div class="bg-brand-500/20 hover:bg-brand-500/40 rounded-t w-full h-[100%] transition-colors"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-2">
+                        <span>12:00 AM</span>
+                        <span>06:00 AM</span>
+                        <span>12:00 PM</span>
+                        <span>06:00 PM</span>
+                        <span>Now</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 2: ENDPOINTS TAB (MAIN DASHBOARD) -->
+            <section id="tab-endpoints" role="tabpanel" aria-labelledby="tab-btn-endpoints" tabindex="0" class="tab-panel space-y-6 focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-xl">
+                <!-- Summary Metrics Bar -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Total Endpoints</p>
+                        <h3 id="metricTotal" class="text-3xl font-extrabold text-white">0</h3>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Active Models</p>
+                        <h3 id="metricActive" class="text-3xl font-extrabold text-emerald-400">0</h3>
+                    </div>
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                        <p class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Inactive Models</p>
+                        <h3 id="metricInactive" class="text-3xl font-extrabold text-rose-400">0</h3>
+                    </div>
+                </div>
+
+                <!-- Endpoints Data Card -->
+                <div class="bg-gray-900 border border-gray-800 rounded-xl flex flex-col overflow-hidden">
+                    <!-- Toolbar Controls -->
+                    <div class="p-4 lg:p-6 border-b border-gray-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="flex flex-col sm:flex-row gap-3 flex-1">
+                            <!-- Search Input -->
+                            <div class="relative w-full sm:w-64">
+                                <i class="fas fa-search absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm" aria-hidden="true"></i>
+                                <input type="text" id="searchInput" placeholder="Search model or provider..." class="w-full bg-gray-950 border border-gray-800 text-sm text-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block pl-10 p-2.5 transition-colors placeholder-gray-500 outline-none" aria-label="Search endpoints by model or provider name">
+                            </div>
+                            
+                            <!-- Status Filter Dropdown -->
+                            <div class="w-full sm:w-auto">
+                                <select id="statusFilter" class="w-full bg-gray-950 border border-gray-800 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block p-2.5 outline-none transition-colors" aria-label="Filter endpoints by status">
+                                    <option value="All">All Statuses</option>
+                                    <option value="Active">Active Only</option>
+                                    <option value="Inactive">Inactive Only</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Add Endpoint Trigger Button -->
+                        <button id="addEndpointBtn" type="button" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-brand-500 w-full sm:w-auto">
+                            <i class="fas fa-plus" aria-hidden="true"></i>
+                            <span>Add Endpoint</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Table Responsive Container -->
+                    <div class="overflow-x-auto w-full">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <caption class="sr-only">LLM Proxy Gateway Endpoints List</caption>
+                            <thead class="bg-gray-950/60 text-gray-400 border-b border-gray-800">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3.5 font-semibold tracking-wider" aria-sort="ascending" id="th-name">
+                                        <button type="button" class="sort-btn flex items-center gap-2 hover:text-white transition-colors focus:outline-none focus:text-white" data-sort="name">
+                                            <span>Model Name</span>
+                                            <i class="fas fa-sort-up text-brand-400" aria-hidden="true"></i>
+                                        </button>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3.5 font-semibold tracking-wider" aria-sort="none" id="th-provider">
+                                        <button type="button" class="sort-btn flex items-center gap-2 hover:text-white transition-colors focus:outline-none focus:text-white" data-sort="provider">
+                                            <span>Provider</span>
+                                            <i class="fas fa-sort text-gray-600" aria-hidden="true"></i>
+                                        </button>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3.5 font-semibold tracking-wider" aria-sort="none" id="th-status">
+                                        <button type="button" class="sort-btn flex items-center gap-2 hover:text-white transition-colors focus:outline-none focus:text-white" data-sort="status">
+                                            <span>Status</span>
+                                            <i class="fas fa-sort text-gray-600" aria-hidden="true"></i>
+                                        </button>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3.5 font-semibold tracking-wider" aria-sort="none" id="th-rpm">
+                                        <button type="button" class="sort-btn flex items-center gap-2 hover:text-white transition-colors focus:outline-none focus:text-white" data-sort="rpm">
+                                            <span>RPM Limit</span>
+                                            <i class="fas fa-sort text-gray-600" aria-hidden="true"></i>
+                                        </button>
+                                    </th>
+                                    <th scope="col" class="px-6 py-3.5 font-semibold tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody" class="divide-y divide-gray-800/60">
+                                <!-- Dynamic rows rendered safely via JS -->
+                            </tbody>
+                        </table>
+                        
+                        <!-- Empty State Container -->
+                        <div id="emptyState" class="hidden flex-col items-center justify-center py-12 text-gray-500">
+                            <i class="fas fa-inbox text-4xl mb-3 text-gray-600" aria-hidden="true"></i>
+                            <p class="text-base font-medium">No endpoints found matching your criteria.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pagination Footer -->
+                    <div class="p-4 border-t border-gray-800 flex items-center justify-between text-sm text-gray-400 bg-gray-900">
+                        <span id="pageInfo">Showing 0 to 0 of 0 entries</span>
+                        <div class="flex gap-2">
+                            <button id="prevPageBtn" type="button" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500" aria-label="Previous Page">Prev</button>
+                            <button id="nextPageBtn" type="button" class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500" aria-label="Next Page">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: LOGS TAB -->
+            <section id="tab-logs" role="tabpanel" aria-labelledby="tab-btn-logs" tabindex="0" class="tab-panel hidden space-y-4 focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-xl">
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500" aria-hidden="true"></span>
+                        <span class="text-sm font-semibold text-white">Live Proxy Console Stream</span>
+                    </div>
+                    <button type="button" id="clearLogsBtn" class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        Clear Stream
+                    </button>
+                </div>
+                <div id="logsConsole" role="log" aria-live="polite" class="bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-xs text-gray-300 h-96 overflow-y-auto space-y-2">
+                    <p class="text-gray-500">[2026-10-20 15:10:02] [INFO] Proxy gateway listening on port 8080</p>
+                    <p><span class="text-emerald-400">[200 OK]</span> POST /v1/chat/completions -&gt; provider: Google (Gemini 1.5 Pro) - latency: 182ms - tokens: 420</p>
+                    <p><span class="text-emerald-400">[200 OK]</span> POST /v1/chat/completions -&gt; provider: OpenAI (GPT-4o) - latency: 295ms - tokens: 812</p>
+                    <p><span class="text-amber-400">[429 RATE_LIMIT]</span> POST /v1/embeddings -&gt; provider: DeepSeek (DeepSeek Coder) - RPM exceeded limit (500)</p>
+                    <p><span class="text-emerald-400">[200 OK]</span> POST /v1/chat/completions -&gt; provider: Anthropic (Claude 3.5 Sonnet) - latency: 310ms - tokens: 1240</p>
+                    <p><span class="text-emerald-400">[200 OK]</span> POST /v1/chat/completions -&gt; provider: Meta (Llama 3 70B) - latency: 140ms - tokens: 210</p>
+                </div>
+            </section>
+
+            <!-- SECTION 4: SETTINGS TAB -->
+            <section id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings" tabindex="0" class="tab-panel hidden space-y-6 focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-xl">
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 max-w-2xl space-y-6">
+                    <h2 class="text-lg font-bold text-white border-b border-gray-800 pb-3">Proxy Configuration Settings</h2>
+                    
+                    <form id="settingsForm" class="space-y-4">
+                        <div>
+                            <label for="settingTimeout" class="block text-sm font-medium text-gray-300 mb-1">Default Request Timeout (ms)</label>
+                            <input type="number" id="settingTimeout" value="30000" class="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label for="settingStrategy" class="block text-sm font-medium text-gray-300 mb-1">Load Balancing Strategy</label>
+                            <select id="settingStrategy" class="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+                                <option value="round-robin">Round Robin</option>
+                                <option value="lowest-latency">Lowest Latency First</option>
+                                <option value="strict-priority">Strict Priority</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="settingFailover" class="block text-sm font-medium text-gray-300 mb-1">Failover Routing Mode</label>
+                            <select id="settingFailover" class="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+                                <option value="automatic">Automatic Fallback on 5xx Error</option>
+                                <option value="manual">Manual Intervention Only</option>
+                            </select>
+                        </div>
+                        <div class="pt-4 border-t border-gray-800 flex justify-end">
+                            <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                Save Gateway Configuration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Endpoint Modal (Create & Edit) -->
+    <div id="endpointModal" class="fixed inset-0 z-50 hidden items-center justify-center px-4 transition-opacity duration-200 opacity-0" aria-modal="true" role="dialog" aria-labelledby="modalTitle">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200" id="modalBackdrop" aria-hidden="true"></div>
+        
+        <!-- Modal Card -->
+        <div class="relative bg-gray-900 border border-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all duration-200 scale-95 opacity-0" id="modalContent">
+            <div class="flex justify-between items-center mb-5 border-b border-gray-800 pb-4">
+                <h2 id="modalTitle" class="text-xl font-bold text-white">Add New Endpoint</h2>
+                <button id="closeModalBtn" type="button" class="text-gray-400 hover:text-white focus:outline-none rounded-lg focus:ring-2 focus:ring-brand-500 p-1.5" aria-label="Close modal dialog">
+                    <i class="fas fa-times text-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <form id="endpointForm" class="space-y-4">
+                <input type="hidden" id="formId">
+                
+                <div>
+                    <label for="formName" class="block mb-1.5 text-sm font-medium text-gray-300">Model Name <span class="text-rose-400">*</span></label>
+                    <input type="text" id="formName" required placeholder="e.g. GPT-4o or Gemini 1.5 Pro" class="w-full bg-gray-950 border border-gray-800 text-white text-sm rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block p-2.5 outline-none placeholder-gray-500">
+                </div>
+                
+                <div>
+                    <label for="formProvider" class="block mb-1.5 text-sm font-medium text-gray-300">Provider <span class="text-rose-400">*</span></label>
+                    <select id="formProvider" required class="w-full bg-gray-950 border border-gray-800 text-white text-sm rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block p-2.5 outline-none">
+                        <option value="" disabled selected>Select a provider</option>
+                        <option value="OpenAI">OpenAI</option>
+                        <option value="Google">Google</option>
+                        <option value="Anthropic">Anthropic</option>
+                        <option value="DeepSeek">DeepSeek</option>
+                        <option value="Meta">Meta</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="formRpm" class="block mb-1.5 text-sm font-medium text-gray-300">RPM Limit <span class="text-rose-400">*</span></label>
+                        <input type="number" id="formRpm" required min="1" placeholder="e.g. 1000" class="w-full bg-gray-950 border border-gray-800 text-white text-sm rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block p-2.5 outline-none placeholder-gray-500">
+                    </div>
+                    <div>
+                        <label for="formStatus" class="block mb-1.5 text-sm font-medium text-gray-300">Status</label>
+                        <select id="formStatus" class="w-full bg-gray-950 border border-gray-800 text-white text-sm rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 block p-2.5 outline-none">
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-800">
+                    <button type="button" id="cancelModalBtn" class="px-4 py-2 text-sm font-medium text-gray-300 bg-transparent border border-gray-700 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors shadow-lg shadow-brand-500/20">
+                        Save Endpoint
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none" aria-live="polite"></div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- 1. STATE & DATA ---
+            let endpoints = [
+                { id: 1, name: 'Gemini 1.5 Pro', provider: 'Google', status: 'Active', rpm: 1500 },
+                { id: 2, name: 'DeepSeek Coder', provider: 'DeepSeek', status: 'Active', rpm: 500 },
+                { id: 3, name: 'Claude 3.5 Sonnet', provider: 'Anthropic', status: 'Inactive', rpm: 2000 },
+                { id: 4, name: 'GPT-4o', provider: 'OpenAI', status: 'Active', rpm: 5000 },
+                { id: 5, name: 'Llama 3 70B', provider: 'Meta', status: 'Active', rpm: 1000 },
+                { id: 6, name: 'Mistral Large', provider: 'Custom', status: 'Inactive', rpm: 800 }
+            ];
+
+            let state = {
+                currentTab: 'endpoints',
+                currentPage: 1,
+                itemsPerPage: 5,
+                searchQuery: '',
+                filterStatus: 'All',
+                sortCol: 'name',
+                sortAsc: true
+            };
+
+            // Animation Timers & Motion Media Listener
+            let modalTimer = null;
+            let sidebarTimer = null;
+            let previouslyFocusedElement = null;
+
+            const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+            let prefersReducedMotion = mediaQuery.matches;
+
+            if (typeof mediaQuery.addEventListener === 'function') {
+                mediaQuery.addEventListener('change', (e) => { prefersReducedMotion = e.matches; });
+            } else if (typeof mediaQuery.addListener === 'function') {
+                mediaQuery.addListener((e) => { prefersReducedMotion = e.matches; });
+            }
+
+            // --- 2. DOM SELECTORS ---
+            const els = {
+                // Metrics
+                metricTotal: document.getElementById('metricTotal'),
+                metricActive: document.getElementById('metricActive'),
+                metricInactive: document.getElementById('metricInactive'),
+                
+                // Table Controls
+                tableBody: document.getElementById('tableBody'),
+                emptyState: document.getElementById('emptyState'),
+                searchInput: document.getElementById('searchInput'),
+                statusFilter: document.getElementById('statusFilter'),
+                pageInfo: document.getElementById('pageInfo'),
+                prevPageBtn: document.getElementById('prevPageBtn'),
+                nextPageBtn: document.getElementById('nextPageBtn'),
+                sortBtns: document.querySelectorAll('.sort-btn'),
+                
+                // Tabs & Panels
+                navTabBtns: document.querySelectorAll('.nav-tab-btn'),
+                tabPanels: document.querySelectorAll('.tab-panel'),
+                pageTitle: document.getElementById('pageTitle'),
+                
+                // Sidebar Controls
+                sidebar: document.getElementById('sidebar'),
+                sidebarBackdrop: document.getElementById('sidebarBackdrop'),
+                openSidebarBtn: document.getElementById('openSidebarBtn'),
+                closeSidebarBtn: document.getElementById('closeSidebarBtn'),
+                
+                // Modal Dialog Controls
+                modal: document.getElementById('endpointModal'),
+                modalContent: document.getElementById('modalContent'),
+                modalBackdrop: document.getElementById('modalBackdrop'),
+                modalTitle: document.getElementById('modalTitle'),
+                form: document.getElementById('endpointForm'),
+                formId: document.getElementById('formId'),
+                formName: document.getElementById('formName'),
+                formProvider: document.getElementById('formProvider'),
+                formRpm: document.getElementById('formRpm'),
+                formStatus: document.getElementById('formStatus'),
+                addBtn: document.getElementById('addEndpointBtn'),
+                closeModalBtn: document.getElementById('closeModalBtn'),
+                cancelModalBtn: document.getElementById('cancelModalBtn'),
+                
+                // Settings Form & Logs
+                settingsForm: document.getElementById('settingsForm'),
+                clearLogsBtn: document.getElementById('clearLogsBtn'),
+                logsConsole: document.getElementById('logsConsole'),
+
+                // Toasts
+                toastContainer: document.getElementById('toastContainer')
+            };
+
+            // --- 3. NAVIGATION & TABS ---
+            function switchTab(tabId, focusNewTab = false) {
+                state.currentTab = tabId;
+                
+                // Update Nav Buttons State (Roving Tabindex & ARIA selected)
+                els.navTabBtns.forEach(btn => {
+                    const isTarget = btn.dataset.tab === tabId;
+                    const icon = btn.querySelector('i');
+
+                    if (isTarget) {
+                        btn.className = 'nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 font-medium text-left focus:outline-none focus:ring-2 focus:ring-brand-500';
+                        btn.setAttribute('aria-selected', 'true');
+                        btn.setAttribute('tabindex', '0');
+                        if (icon) {
+                            icon.classList.remove('text-gray-400');
+                            icon.classList.add('text-brand-400');
+                        }
+                        if (focusNewTab) {
+                            btn.focus();
+                        }
+                    } else {
+                        btn.className = 'nav-tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/80 transition-colors font-medium text-left focus:outline-none focus:ring-2 focus:ring-brand-500';
+                        btn.setAttribute('aria-selected', 'false');
+                        btn.setAttribute('tabindex', '-1');
+                        if (icon) {
+                            icon.classList.remove('text-brand-400');
+                            icon.classList.add('text-gray-400');
+                        }
+                    }
+                });
+
+                // Hide all panels, show active panel
+                els.tabPanels.forEach(panel => {
+                    if (panel.id === `tab-${tabId}`) {
+                        panel.classList.remove('hidden');
+                    } else {
+                        panel.classList.add('hidden');
+                    }
+                });
+
+                // Update Header Title
+                const titles = {
+                    overview: 'System Overview',
+                    endpoints: 'Endpoint Management',
+                    logs: 'Real-time Request Logs',
+                    settings: 'Gateway Configuration'
+                };
+                els.pageTitle.textContent = titles[tabId] || 'LLM Proxy Gateway';
+
+                // Auto-close sidebar on mobile view
+                if (window.innerWidth < 1024) {
+                    toggleSidebar(false);
+                }
+            }
+
+            // --- 4. TABLE RENDERING & METRICS ---
+            function renderMetrics() {
+                const total = endpoints.length;
+                const active = endpoints.filter(e => e.status === 'Active').length;
+                const inactive = total - active;
+                
+                if (els.metricTotal) els.metricTotal.textContent = total;
+                if (els.metricActive) els.metricActive.textContent = active;
+                if (els.metricInactive) els.metricInactive.textContent = inactive;
+            }
+
+            function getProviderIconClass(provider) {
+                switch(provider) {
+                    case 'Google': return 'fa-solid fa-robot text-brand-400';
+                    case 'OpenAI': return 'fa-solid fa-cube text-purple-400';
+                    case 'Anthropic': return 'fa-solid fa-brain text-amber-400';
+                    case 'DeepSeek': return 'fa-solid fa-code text-blue-400';
+                    case 'Meta': return 'fa-solid fa-share-nodes text-indigo-400';
+                    default: return 'fa-solid fa-sliders text-emerald-400';
+                }
+            }
+
+            function createRow(endpoint) {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-800/50 transition-colors border-b border-gray-800/60';
+                tr.dataset.id = endpoint.id;
+                
+                // Create table row structural elements safely
+                tr.innerHTML = `
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="provider-icon-wrap w-8 h-8 rounded-lg bg-gray-950 border border-gray-800 flex items-center justify-center shrink-0">
+                                <i class="icon-elem" aria-hidden="true"></i>
+                            </div>
+                            <span class="font-semibold text-gray-100 cell-name"></span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-gray-300 font-medium cell-provider"></td>
+                    <td class="px-6 py-4">
+                        <span class="status-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border"></span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-200 font-mono"><span class="cell-rpm"></span> <span class="text-gray-500 text-xs font-sans">req/min</span></td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-1.5">
+                            <button type="button" class="action-edit p-2 text-gray-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500" title="Edit Endpoint">
+                                <i class="fas fa-pen-to-square text-sm" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="action-toggle p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500" title="Toggle Endpoint Status">
+                                <i class="fas text-sm" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                // Set dynamic text safely
+                tr.querySelector('.cell-name').textContent = endpoint.name;
+                tr.querySelector('.cell-provider').textContent = endpoint.provider;
+                tr.querySelector('.cell-rpm').textContent = endpoint.rpm.toLocaleString();
+
+                // Provider icon styling
+                const iconElem = tr.querySelector('.icon-elem');
+                iconElem.className = getProviderIconClass(endpoint.provider);
+
+                // Status Badge Styling
+                const badge = tr.querySelector('.status-badge');
+                badge.textContent = endpoint.status;
+                if (endpoint.status === 'Active') {
+                    badge.className += ' bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                } else {
+                    badge.className += ' bg-gray-800 text-gray-400 border-gray-700';
+                }
+
+                // Edit Button ARIA
+                const editBtn = tr.querySelector('.action-edit');
+                editBtn.setAttribute('aria-label', `Edit endpoint ${endpoint.name}`);
+
+                // Toggle Button Configuration
+                const toggleBtn = tr.querySelector('.action-toggle');
+                const toggleIcon = toggleBtn.querySelector('i');
+                if (endpoint.status === 'Active') {
+                    toggleBtn.className += ' text-gray-400 hover:text-rose-400 hover:bg-rose-500/10';
+                    toggleIcon.className += ' fa-power-off';
+                    toggleBtn.setAttribute('aria-label', `Disable endpoint ${endpoint.name}`);
+                    toggleBtn.setAttribute('title', 'Disable Endpoint');
+                } else {
+                    toggleBtn.className += ' text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10';
+                    toggleIcon.className += ' fa-play';
+                    toggleBtn.setAttribute('aria-label', `Enable endpoint ${endpoint.name}`);
+                    toggleBtn.setAttribute('title', 'Enable Endpoint');
+                }
+
+                // Attach Action Listeners
+                editBtn.addEventListener('click', () => openModal(endpoint));
+                toggleBtn.addEventListener('click', () => toggleEndpointStatus(endpoint.id));
+
+                return tr;
+            }
+
+            function getFilteredAndSortedEndpoints() {
+                // Filter
+                let filtered = endpoints.filter(e => {
+                    const matchSearch = e.name.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+                                        e.provider.toLowerCase().includes(state.searchQuery.toLowerCase());
+                    const matchStatus = state.filterStatus === 'All' || e.status === state.filterStatus;
+                    return matchSearch && matchStatus;
+                });
+
+                // Sort
+                filtered.sort((a, b) => {
+                    let valA = a[state.sortCol];
+                    let valB = b[state.sortCol];
+                    
+                    if (typeof valA === 'string') {
+                        return state.sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    }
+                    return state.sortAsc ? valA - valB : valB - valA;
+                });
+
+                return filtered;
+            }
+
+            function renderTable() {
+                const filtered = getFilteredAndSortedEndpoints();
+
+                // Update Header ARIA sort status
+                ['name', 'provider', 'status', 'rpm'].forEach(col => {
+                    const th = document.getElementById(`th-${col}`);
+                    if (!th) return;
+                    const icon = th.querySelector('i');
+                    if (state.sortCol === col) {
+                        th.setAttribute('aria-sort', state.sortAsc ? 'ascending' : 'descending');
+                        if (icon) icon.className = `fas ${state.sortAsc ? 'fa-sort-up' : 'fa-sort-down'} text-brand-400`;
+                    } else {
+                        th.setAttribute('aria-sort', 'none');
+                        if (icon) icon.className = 'fas fa-sort text-gray-600';
+                    }
+                });
+
+                // Pagination Calculation
+                const totalPages = Math.ceil(filtered.length / state.itemsPerPage) || 1;
+                if (state.currentPage > totalPages) state.currentPage = totalPages;
+                
+                const startIdx = (state.currentPage - 1) * state.itemsPerPage;
+                const paginated = filtered.slice(startIdx, startIdx + state.itemsPerPage);
+
+                // Render Table Elements safely using replaceChildren
+                if (paginated.length === 0) {
+                    els.tableBody.replaceChildren();
+                    els.emptyState.classList.remove('hidden');
+                    els.emptyState.classList.add('flex');
+                } else {
+                    els.emptyState.classList.add('hidden');
+                    els.emptyState.classList.remove('flex');
+                    const rows = paginated.map(endpoint => createRow(endpoint));
+                    els.tableBody.replaceChildren(...rows);
+                }
+
+                // Update Pagination Info
+                const endIdx = Math.min(startIdx + state.itemsPerPage, filtered.length);
+                els.pageInfo.textContent = `Showing ${filtered.length ? startIdx + 1 : 0} to ${endIdx} of ${filtered.length} entries`;
+                
+                els.prevPageBtn.disabled = state.currentPage === 1;
+                els.nextPageBtn.disabled = state.currentPage === totalPages || totalPages === 0;
+            }
+
+            function restoreFocusToEndpointAction(id, actionType = 'edit') {
+                const targetRow = Array.from(els.tableBody.querySelectorAll('tr')).find(tr => tr.dataset.id == id);
+                if (targetRow) {
+                    const btn = targetRow.querySelector(actionType === 'edit' ? '.action-edit' : '.action-toggle');
+                    if (btn) {
+                        btn.focus();
+                        return;
+                    }
+                }
+                // Fallback focus target
+                if (els.addBtn) els.addBtn.focus();
+            }
+
+            // --- 5. CRUD ACTIONS ---
+            function toggleEndpointStatus(id) {
+                const endpoint = endpoints.find(e => e.id === id);
+                if (endpoint) {
+                    endpoint.status = endpoint.status === 'Active' ? 'Inactive' : 'Active';
+                    showToast(`${endpoint.name} status updated to ${endpoint.status}.`, endpoint.status === 'Active' ? 'success' : 'warning');
+                    renderTable();
+                    renderMetrics();
+                    restoreFocusToEndpointAction(id, 'toggle');
+                }
+            }
+
+            function saveEndpoint(e) {
+                e.preventDefault();
+                
+                const id = parseInt(els.formId.value, 10);
+                const rpmVal = parseInt(els.formRpm.value, 10);
+
+                // Validation: RPM limit must be a positive integer
+                if (isNaN(rpmVal) || rpmVal <= 0) {
+                    showToast('RPM limit must be a positive integer.', 'error');
+                    return;
+                }
+
+                const newData = {
+                    name: els.formName.value.trim(),
+                    provider: els.formProvider.value,
+                    rpm: rpmVal,
+                    status: els.formStatus.value
+                };
+
+                let targetId = id;
+
+                if (id) {
+                    // Update Existing Endpoint
+                    const index = endpoints.findIndex(ep => ep.id === id);
+                    if (index > -1) {
+                        endpoints[index] = { ...endpoints[index], ...newData };
+                        showToast(`Endpoint ${newData.name} updated successfully.`, 'success');
+                    }
+                } else {
+                    // Create New Endpoint
+                    targetId = endpoints.length ? Math.max(...endpoints.map(ep => ep.id)) + 1 : 1;
+                    endpoints.push({ id: targetId, ...newData });
+                    showToast(`Endpoint ${newData.name} created successfully.`, 'success');
+
+                    // Automatically navigate page to show newly added item
+                    const filtered = getFilteredAndSortedEndpoints();
+                    const newIndex = filtered.findIndex(ep => ep.id === targetId);
+                    if (newIndex !== -1) {
+                        state.currentPage = Math.floor(newIndex / state.itemsPerPage) + 1;
+                    }
+                }
+
+                // Skip focus restoration so focus stays on the newly rendered table row
+                closeModal(false);
+                renderTable();
+                renderMetrics();
+                restoreFocusToEndpointAction(targetId, 'edit');
+            }
+
+            // --- 6. MODAL DIALOG & FOCUS TRAP ---
+            function openModal(endpoint = null) {
+                previouslyFocusedElement = document.activeElement;
+                if (modalTimer) clearTimeout(modalTimer);
+
+                // Isolate background from screen readers
+                const mainContainer = document.querySelector('main');
+                if (mainContainer) mainContainer.setAttribute('inert', '');
+                if (els.sidebar) els.sidebar.setAttribute('inert', '');
+
+                if (endpoint) {
+                    els.modalTitle.textContent = 'Edit Endpoint';
+                    els.formId.value = endpoint.id;
+                    els.formName.value = endpoint.name;
+                    els.formProvider.value = endpoint.provider;
+                    els.formRpm.value = endpoint.rpm;
+                    els.formStatus.value = endpoint.status;
+                } else {
+                    els.modalTitle.textContent = 'Add New Endpoint';
+                    els.form.reset();
+                    els.formId.value = '';
+                    els.formStatus.value = 'Active';
+                }
+                
+                els.modal.classList.remove('hidden');
+                
+                // Force repaint for smooth opacity transition
+                void els.modal.offsetWidth;
+
+                els.modal.classList.remove('opacity-0');
+                els.modal.classList.add('opacity-100');
+                els.modalContent.classList.remove('scale-95', 'opacity-0');
+                els.modalContent.classList.add('scale-100', 'opacity-100');
+                
+                setTimeout(() => {
+                    if (!els.modal.classList.contains('hidden')) {
+                        els.formName.focus();
+                    }
+                }, 50);
+            }
+
+            function closeModal(restoreFocus = true) {
+                if (modalTimer) clearTimeout(modalTimer);
+
+                // Restore background accessibility
+                const mainContainer = document.querySelector('main');
+                if (mainContainer) mainContainer.removeAttribute('inert');
+                if (els.sidebar) els.sidebar.removeAttribute('inert');
+
+                els.modal.classList.remove('opacity-100');
+                els.modal.classList.add('opacity-0');
+                els.modalContent.classList.remove('scale-100', 'opacity-100');
+                els.modalContent.classList.add('scale-95', 'opacity-0');
+                
+                const finishClose = () => {
+                    els.modal.classList.add('hidden');
+                    els.form.reset();
+                    if (restoreFocus && previouslyFocusedElement && document.body.contains(previouslyFocusedElement) && typeof previouslyFocusedElement.focus === 'function') {
+                        previouslyFocusedElement.focus();
+                    }
+                };
+
+                if (prefersReducedMotion) {
+                    finishClose();
+                } else {
+                    modalTimer = setTimeout(finishClose, 200);
+                }
+            }
+
+            // Keyboard Focus Trap in Modal
+            els.modal.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') {
+                    const focusables = els.modal.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                    const first = focusables[0];
+                    const last = focusables[focusables.length - 1];
+
+                    if (e.shiftKey && document.activeElement === first) {
+                        e.preventDefault();
+                        last.focus();
+                    } else if (!e.shiftKey && document.activeElement === last) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            });
+
+            // --- 7. SIDEBAR DRAWER CONTROLS ---
+            function toggleSidebar(forceOpen = null) {
+                if (sidebarTimer) clearTimeout(sidebarTimer);
+
+                const isCurrentlyClosed = els.sidebar.classList.contains('-translate-x-full');
+                const shouldOpen = forceOpen !== null ? forceOpen : isCurrentlyClosed;
+
+                if (shouldOpen) {
+                    els.openSidebarBtn.setAttribute('aria-expanded', 'true');
+                    els.sidebarBackdrop.classList.remove('hidden');
+                    els.sidebar.classList.remove('-translate-x-full');
+                    
+                    void els.sidebarBackdrop.offsetWidth;
+                    els.sidebarBackdrop.classList.remove('opacity-0');
+                    els.sidebarBackdrop.classList.add('opacity-100');
+                } else {
+                    els.openSidebarBtn.setAttribute('aria-expanded', 'false');
+                    els.sidebar.classList.add('-translate-x-full');
+                    els.sidebarBackdrop.classList.remove('opacity-100');
+                    els.sidebarBackdrop.classList.add('opacity-0');
+
+                    const finishSidebarClose = () => {
+                        els.sidebarBackdrop.classList.add('hidden');
+                        if (window.innerWidth < 1024 && document.activeElement && els.sidebar.contains(document.activeElement)) {
+                            if (els.openSidebarBtn) els.openSidebarBtn.focus();
+                        }
+                    };
+
+                    if (prefersReducedMotion) {
+                        finishSidebarClose();
+                    } else {
+                        sidebarTimer = setTimeout(finishSidebarClose, 200);
+                    }
+                }
+            }
+
+            // --- 8. TOAST NOTIFICATION SYSTEM ---
+            function showToast(message, type = 'success') {
+                const toast = document.createElement('div');
+                toast.className = 'flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl shadow-black/40 border backdrop-blur-md pointer-events-auto fade-in max-w-sm';
+                toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+                
+                let iconClass = '', colorClass = '';
+                
+                if (type === 'success') {
+                    colorClass = 'bg-gray-900 text-emerald-400 border-gray-800 border-l-4 border-l-emerald-500';
+                    iconClass = 'fas fa-circle-check text-emerald-400';
+                } else if (type === 'warning') {
+                    colorClass = 'bg-gray-900 text-amber-400 border-gray-800 border-l-4 border-l-amber-500';
+                    iconClass = 'fas fa-triangle-exclamation text-amber-400';
+                } else if (type === 'error') {
+                    colorClass = 'bg-gray-900 text-rose-400 border-gray-800 border-l-4 border-l-rose-500';
+                    iconClass = 'fas fa-circle-xmark text-rose-400';
+                } else {
+                    colorClass = 'bg-gray-900 text-brand-400 border-gray-800 border-l-4 border-l-brand-500';
+                    iconClass = 'fas fa-circle-info text-brand-400';
+                }
+
+                toast.className += ` ${colorClass}`;
+                
+                toast.innerHTML = `
+                    <i class="${iconClass} text-base shrink-0" aria-hidden="true"></i>
+                    <span class="text-sm font-medium text-gray-200 message-span"></span>
+                    <button type="button" class="ml-auto text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-gray-400 rounded p-1" aria-label="Close notification">
+                        <i class="fas fa-times text-xs" aria-hidden="true"></i>
+                    </button>
+                `;
+                
+                toast.querySelector('.message-span').textContent = message;
+                toast.querySelector('button').addEventListener('click', () => removeToast(toast));
+
+                els.toastContainer.appendChild(toast);
+
+                const autoRemoveTimer = setTimeout(() => {
+                    removeToast(toast);
+                }, 3500);
+
+                toast.dataset.timerId = autoRemoveTimer;
+            }
+
+            function removeToast(toast) {
+                if (!document.body.contains(toast)) return;
+                
+                if (toast.dataset.timerId) {
+                    clearTimeout(parseInt(toast.dataset.timerId, 10));
+                }
+
+                if (prefersReducedMotion) {
+                    toast.remove();
+                    return;
+                }
+
+                toast.classList.replace('fade-in', 'fade-out');
+                const animFallback = setTimeout(() => {
+                    if (document.body.contains(toast)) toast.remove();
+                }, 200);
+
+                toast.addEventListener('animationend', () => {
+                    clearTimeout(animFallback);
+                    if (document.body.contains(toast)) toast.remove();
+                }, { once: true });
+            }
+
+            // --- 9. EVENT LISTENERS ---
+            
+            // Navigation Tabs Listener & Arrow Key Navigation (WAI-ARIA Tablist)
+            els.navTabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    switchTab(btn.dataset.tab);
+                });
+            });
+
+            const tablistNav = document.querySelector('[role="tablist"]');
+            if (tablistNav) {
+                tablistNav.addEventListener('keydown', (e) => {
+                    const tabs = Array.from(els.navTabBtns);
+                    const currentIndex = tabs.findIndex(t => t.dataset.tab === state.currentTab);
+                    let nextIndex = -1;
+
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        nextIndex = (currentIndex + 1) % tabs.length;
+                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                    } else if (e.key === 'Home') {
+                        e.preventDefault();
+                        nextIndex = 0;
+                    } else if (e.key === 'End') {
+                        e.preventDefault();
+                        nextIndex = tabs.length - 1;
+                    }
+
+                    if (nextIndex !== -1) {
+                        switchTab(tabs[nextIndex].dataset.tab, true);
+                    }
+                });
+            }
+
+            // Sidebar Controls
+            els.openSidebarBtn.addEventListener('click', () => toggleSidebar(true));
+            els.closeSidebarBtn.addEventListener('click', () => toggleSidebar(false));
+            els.sidebarBackdrop.addEventListener('click', () => toggleSidebar(false));
+
+            // Table Search & Filter
+            els.searchInput.addEventListener('input', (e) => {
+                state.searchQuery = e.target.value;
+                state.currentPage = 1;
+                renderTable();
+            });
+
+            els.statusFilter.addEventListener('change', (e) => {
+                state.filterStatus = e.target.value;
+                state.currentPage = 1;
+                renderTable();
+            });
+
+            els.addBtn.addEventListener('click', () => openModal());
+
+            // Sorting Buttons
+            els.sortBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const col = btn.dataset.sort;
+                    if (state.sortCol === col) {
+                        state.sortAsc = !state.sortAsc;
+                    } else {
+                        state.sortCol = col;
+                        state.sortAsc = true;
+                    }
+                    renderTable();
+                });
+            });
+
+            // Pagination Controls
+            els.prevPageBtn.addEventListener('click', () => {
+                if (state.currentPage > 1) { 
+                    state.currentPage--; 
+                    renderTable(); 
+                }
+            });
+
+            els.nextPageBtn.addEventListener('click', () => {
+                state.currentPage++; 
+                renderTable();
+            });
+
+            // Modal Form Handlers
+            els.closeModalBtn.addEventListener('click', () => closeModal(true));
+            els.cancelModalBtn.addEventListener('click', () => closeModal(true));
+            els.modalBackdrop.addEventListener('click', () => closeModal(true));
+            els.form.addEventListener('submit', saveEndpoint);
+
+            // Settings Form Handler
+            els.settingsForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                showToast('Gateway configuration saved successfully.', 'success');
+            });
+
+            // Clear Logs Stream Handler
+            if (els.clearLogsBtn) {
+                els.clearLogsBtn.addEventListener('click', () => {
+                    if (els.logsConsole) {
+                        const emptyMsg = document.createElement('p');
+                        emptyMsg.className = 'text-gray-500 italic py-4 text-center';
+                        emptyMsg.textContent = 'Console stream cleared. Waiting for new request events...';
+                        els.logsConsole.replaceChildren(emptyMsg);
+                    }
+                    showToast('Proxy console logs cleared.', 'info');
+                });
+            }
+
+            // Global Keyboard Handler
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    if (!els.modal.classList.contains('hidden')) {
+                        closeModal(true);
+                    } else if (!els.sidebar.classList.contains('-translate-x-full') && window.innerWidth < 1024) {
+                        toggleSidebar(false);
+                    }
+                }
+            });
+
+            // --- 10. INITIALIZATION ---
+            renderMetrics();
+            renderTable();
+        });
+    </script>
+</body>
+</html>
